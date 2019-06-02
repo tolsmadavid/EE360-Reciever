@@ -12,7 +12,6 @@ load easy.mat
 %Debug Bits
 
 debugPll = 1;
-ssrcDebug = 1;
 
 
 %Parameters
@@ -20,8 +19,6 @@ ssrcDebug = 1;
     interFreq = 2e6;
     sampleFreq = 850e3;
     Ts = 1/sampleFreq;
-    symbolPeriod = 6.4e-6;
-    srrcWidth = 8;
     
 
 %Carrier Recovery
@@ -80,11 +77,8 @@ ssrcDebug = 1;
     end
         
 %Pulse Shape Matched Filtering
-    psmfPulseShape = srrc(srrcWidth/2, rolloff, (symbolPeriod/(Ts)));
-    psmfRFiltered = conv(demodFilteredR, psmfPulseShape);
-    if(ssrcDebug)    
-        figure('Name', 'Output of Pulse Shape Matched Filtering');
-        plot(psmfRFiltered);
-    end
+    psmfPulseShape = srrc(8, rolloff, 5.44);
+    figure('Output of Pulse Shape Matched Filtering);
+    plot(conv(demodFilteredR, psmfPulseShape));
     
-%Interpolator Downsampler
+    
