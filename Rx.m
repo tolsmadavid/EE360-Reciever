@@ -11,9 +11,9 @@ load easy.mat
 
 %Debug Bits
 
-debugPll = 1;
-ssrcDebug = 1;
-
+debugPll = 0;
+ssrcDebug = 0;
+IDdebug = 0;
 
 %Parameters
     
@@ -22,6 +22,7 @@ ssrcDebug = 1;
     Ts = 1/sampleFreq;
     symbolPeriod = 6.4e-6;
     srrcWidth = 8;
+    overSampleFactor = symbolPeriod/Ts;
     
 
 %Carrier Recovery
@@ -88,3 +89,63 @@ ssrcDebug = 1;
     end
     
 %Interpolator Downsampler
+    IDtnow = (srrcWidth/2)*overSampleFactor+1;
+    IDtau = 0;
+    IDxs = zeros(1,length(r));
+    IDtauSave = zeros(1, length(r));
+    IDi = 0;
+    IDmu = 0.02;
+    IDdelta = .2;
+
+    
+    while IDtnow < length(r)- 2*(srrcWidth/2)*overSampleFactor
+        IDi = IDi + 1;
+        IDxs(IDi) = interpsinc(psmfRFiltered, IDtnow + IDtau, (srrcWidth/2));
+        IDx_deltap=interpsinc(psmfRFiltered,IDtnow+IDtau+IDdelta,(srrcWidth/2)); % value to right
+        IDx_deltam=interpsinc(psmfRFiltered,IDtnow+IDtau-IDdelta,(srrcWidth/2)); % value to left
+        
+        IDdx = IDx_deltap-IDx_deltam;
+        %IDtau = IDtau + IDmu*IDdx*IDxs(IDi);
+
+        IDdx=IDx_deltap-IDx_deltam;             % numerical derivative
+        IDqx=quantalph(IDxs(IDi),[-3,-1,1,3]);  % quantize to alphabet
+        %IDtau=IDtau-IDmu*IDdx*(IDqx-IDxs(IDi));         % alg update: DD
+        
+        IDtau=IDtau-IDmu*IDdx*(IDqx-IDxs(IDi)) + IDmu*IDdx*IDxs(IDi);
+        
+        IDtnow=IDtnow+overSampleFactor; 
+        IDtausave(IDi)=IDtau;      % save for plotting
+    end
+
+    if(IDdebug)
+        figure('Name', 'Plot of DD Interpolator')
+        subplot(2,1,1), plot(IDxs(1:IDi-2),'b.')        % plot constellation diagram
+        title('constellation diagram');
+        ylabel('estimated symbol values')
+        subplot(2,1,2), plot(IDtausave(1:IDi-2))        % plot trajectory of tau
+        ylabel('offset estimates'), xlabel('iterations')
+    end
+
+%Find Training Sequences
+    %Create training sequence vector
+        TS = 'A0Oh well whatever Nevermind';
+        TSpam = letters2pam2(TS);
+        TScorr = xcorr(IDxs, TSpam);
+        
+        
+        
+        
+        figure('Name', 'Correlation of Training Sequence')
+        stem(TScorr);
+        
+        
+
+
+%Equalizer
+
+    
+    
+    
+    
+
+
