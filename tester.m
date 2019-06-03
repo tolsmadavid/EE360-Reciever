@@ -29,8 +29,8 @@ load(data_filename)
 [decoded_msg y]=Rx(r, rolloff, desired_user);
 
 % plot constellation of soft decisions
-figure
-plot(y,'.')
+%figure
+%plot(y,'.')
 
 % if student's decoded_msg is a column vector, make it a row vector
 [a b]=size(decoded_msg);

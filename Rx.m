@@ -1,24 +1,23 @@
 % Rx.m - Decodes a Transmitted signal
 % David Tolsma
-%function [decoded_text, y] = Rx(r, rolloff, desireduser)
-clear
-
+function [decoded_text, y] = Rx(r, rolloff, desireduser)
 
 
 addpath('C:\Users\David\Documents\MATLAB\MatLab Files')
 %load easy.mat
-load medium.mat
+%load medium.mat
 %load hard.mat
 
 
-desireduser = desired_user;
+%desireduser = desired_user;
 
 %Debug Bits
 
 debugPll = 0;
 ssrcDebug = 0;
-IDdebug = 1;
+IDdebug = 0;
 TSdebug = 0;
+eqDebug = 1;
 RTSdebug = 0;
 
 %Parameters
@@ -36,7 +35,7 @@ RTSdebug = 0;
     %Carrier Preprocessing
         ppSquaredR = r.^2;
         ppFilterOrder = 500;
-        ppFilterFreq = [0 .55 .57 .61 .63 1];
+        ppFilterFreq = [0 .56 .58 .61 .63 1];
         ppFilterMags = [0 0 1 1 0 0];
         ppFilterB = firpm(ppFilterOrder, ppFilterFreq, ppFilterMags);
         ppRPreProcess = filter(ppFilterB, 1, ppSquaredR);
@@ -53,7 +52,7 @@ RTSdebug = 0;
         ppPhaseS = mod(ppPhaseP - ppPhaseBPF, pi);
 
     %Dual PLLs
-        pllMu1= 0.01; pllMu2 = 0.00005;                  % algorithm stepsizes
+        pllMu1= 0.012; pllMu2 = 0.00005;                  % algorithm stepsizes
         pllF0=300000;                            % assumed freq at receiver
         pllT = 0:Ts:length(r)*Ts-Ts;
         
@@ -69,7 +68,6 @@ RTSdebug = 0;
 
     demodT = 0:Ts:length(r)*Ts - Ts;
     demodCos = cos(2*pi*demodF0*demodT + pllTh1 + pllTh2);
-    %demodCos = cos(2*pi*demodF0*demodT);
     demodR = demodCos.*r';
 
     demodFl=200; demodFf=[0 .2 .25 1]; demodFa=[1 1 0 0];
@@ -101,9 +99,9 @@ RTSdebug = 0;
     IDxs = zeros(1,length(r));
     IDtauSave = zeros(1, length(r));
     IDi = 0;
-    IDmuDD = 0.07;
+    IDmuDD = 0.05;
     IDmuOP = 0.05;
-    IDdelta = .1;
+    IDdelta = .4;
 
     
     while IDtnow < length(r)- 2*(srrcWidth/2)*overSampleFactor
@@ -140,13 +138,13 @@ RTSdebug = 0;
         TSpam = letters2pam2(TS);
         [TScorr, TScorrLags] = xcorr(IDxs, TSpam); %Find correlation between preamble and XS
         
-        [TScorrPeaksMags, ~] = findpeaks(TScorr, 'NPeaks', 11, 'MinPeakDistance', 1000, 'MinPeakHeight', 600);
+        [TScorrPeaksMags, ~] = findpeaks(TScorr, 'NPeaks', 11, 'MinPeakDistance', 1000, 'MinPeakHeight', 400);
         if(isempty(TScorrPeaksMags))
             TScorr = -TScorr;
             IDxs = -IDxs;
         end
             
-        [TScorrPeaksMags, TScorrPeaksLocs] = findpeaks(TScorr, 'NPeaks', 11, 'MinPeakDistance', 1000, 'MinPeakHeight', 600);
+        [TScorrPeaksMags, TScorrPeaksLocs] = findpeaks(TScorr, 'NPeaks', 11, 'MinPeakDistance', 1000, 'MinPeakHeight', 400);
         TSxsPeakLocs = TScorrLags(TScorrPeaksLocs); %Locations of preamble starts in terms of XS
         
         if(TSdebug)
@@ -161,7 +159,7 @@ RTSdebug = 0;
     %Chop TSxs into blocks for processing
         EQout = [];
         EQn=20; 
-        EQmu=.007; 
+        EQmu=.02; 
         EQdelta=10;             % stepsize and delay delta
         EQf=zeros(EQn,1);           % initialize equalizer at 0
         
@@ -179,8 +177,10 @@ RTSdebug = 0;
             EQout = [EQout,conv(EQf,EQframe)];
         end
         
-        %figure('Name', 'After EQ')
-        %plot(EQout(1:30000), '.');
+        if(eqDebug)
+            figure('Name', 'After EQ')
+            plot(EQout, '.');
+        end
         
         EQoutQuant = quantalph(EQout,[-3,-1,1,3]); 
  
@@ -191,7 +191,7 @@ RTSdebug = 0;
     %Create training sequence vector
         [RTScorr, RTScorrLags] = xcorr(EQoutQuant, TSpam); %Find correlation between preamble and XS
             
-        [RTScorrPeaksMags, RTScorrPeaksLocs] = findpeaks(RTScorr, 'NPeaks', 11, 'MinPeakDistance', 2500, 'MinPeakHeight', 600);
+        [RTScorrPeaksMags, RTScorrPeaksLocs] = findpeaks(RTScorr, 'NPeaks', 11, 'MinPeakDistance', 2500, 'MinPeakHeight', 400);
         RTSxsPeakLocs = RTScorrLags(RTScorrPeaksLocs); %Locations of preamble starts in terms of XS
         
         if(RTSdebug)
