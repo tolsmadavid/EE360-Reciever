@@ -1,19 +1,25 @@
 % Rx.m - Decodes a Transmitted signal
 % David Tolsma
-close all
+%function [decoded_text, y] = Rx(r, rolloff, desireduser)
 clear
 
+
+
 addpath('C:\Users\David\Documents\MATLAB\MatLab Files')
-load easy.mat
-%load medium.mat
+%load easy.mat
+load medium.mat
 %load hard.mat
 
+
+desireduser = desired_user;
 
 %Debug Bits
 
 debugPll = 0;
 ssrcDebug = 0;
-IDdebug = 0;
+IDdebug = 1;
+TSdebug = 0;
+RTSdebug = 0;
 
 %Parameters
     
@@ -47,7 +53,7 @@ IDdebug = 0;
         ppPhaseS = mod(ppPhaseP - ppPhaseBPF, pi);
 
     %Dual PLLs
-        pllMu1= 0.01; pllMu2 = 0.0005;                  % algorithm stepsizes
+        pllMu1= 0.01; pllMu2 = 0.00005;                  % algorithm stepsizes
         pllF0=300000;                            % assumed freq at receiver
         pllT = 0:Ts:length(r)*Ts-Ts;
         
@@ -66,7 +72,7 @@ IDdebug = 0;
     %demodCos = cos(2*pi*demodF0*demodT);
     demodR = demodCos.*r';
 
-    demodFl=100; demodFf=[0 .2 .25 1]; demodFa=[1 1 0 0];
+    demodFl=200; demodFf=[0 .2 .25 1]; demodFa=[1 1 0 0];
     demodH=firpm(demodFl,demodFf,demodFa);                    % LPF design
     demodFilteredR = filter(demodH, 1, demodR);
 
@@ -88,14 +94,16 @@ IDdebug = 0;
         plot(psmfRFiltered);
     end
     
+    %psmfRFiltered = psmfRFiltered*1.2;
 %Interpolator Downsampler
     IDtnow = (srrcWidth/2)*overSampleFactor+1;
     IDtau = 0;
     IDxs = zeros(1,length(r));
     IDtauSave = zeros(1, length(r));
     IDi = 0;
-    IDmu = 0.02;
-    IDdelta = .2;
+    IDmuDD = 0.07;
+    IDmuOP = 0.05;
+    IDdelta = .1;
 
     
     while IDtnow < length(r)- 2*(srrcWidth/2)*overSampleFactor
@@ -111,7 +119,7 @@ IDdebug = 0;
         IDqx=quantalph(IDxs(IDi),[-3,-1,1,3]);  % quantize to alphabet
         %IDtau=IDtau-IDmu*IDdx*(IDqx-IDxs(IDi));         % alg update: DD
         
-        IDtau=IDtau-IDmu*IDdx*(IDqx-IDxs(IDi)) + IDmu*IDdx*IDxs(IDi);
+        IDtau=IDtau - IDmuDD*IDdx*(IDqx-IDxs(IDi)) + ((1.7210e+05-IDtnow)/(1.7210e+05))*IDmuOP*IDdx*IDxs(IDi);
         
         IDtnow=IDtnow+overSampleFactor; 
         IDtausave(IDi)=IDtau;      % save for plotting
@@ -130,19 +138,81 @@ IDdebug = 0;
     %Create training sequence vector
         TS = 'A0Oh well whatever Nevermind';
         TSpam = letters2pam2(TS);
-        TScorr = xcorr(IDxs, TSpam);
+        [TScorr, TScorrLags] = xcorr(IDxs, TSpam); %Find correlation between preamble and XS
         
+        [TScorrPeaksMags, ~] = findpeaks(TScorr, 'NPeaks', 11, 'MinPeakDistance', 1000, 'MinPeakHeight', 600);
+        if(isempty(TScorrPeaksMags))
+            TScorr = -TScorr;
+            IDxs = -IDxs;
+        end
+            
+        [TScorrPeaksMags, TScorrPeaksLocs] = findpeaks(TScorr, 'NPeaks', 11, 'MinPeakDistance', 1000, 'MinPeakHeight', 600);
+        TSxsPeakLocs = TScorrLags(TScorrPeaksLocs); %Locations of preamble starts in terms of XS
         
-        
-        
-        figure('Name', 'Correlation of Training Sequence')
-        stem(TScorr);
-        
-        
+        if(TSdebug)
+            figure('Name', 'Correlation of Training Sequence')
+            stem(TScorr);
 
-
+            figure('Name', 'TScorr Peaks')
+            stem(TScorrLags(TScorrPeaksLocs), TScorrPeaksMags);
+        end
+        
 %Equalizer
+    %Chop TSxs into blocks for processing
+        EQout = [];
+        EQn=20; 
+        EQmu=.007; 
+        EQdelta=10;             % stepsize and delay delta
+        EQf=zeros(EQn,1);           % initialize equalizer at 0
+        
+        for(EQi = 1:length(TSxsPeakLocs))
 
+            EQr = IDxs(TSxsPeakLocs(EQi):TSxsPeakLocs(EQi) + length(TSpam) - 1);
+            EQframe = IDxs(TSxsPeakLocs(EQi):TSxsPeakLocs(EQi)+2870-1);
+            
+            for EQj=EQn+1:length(TSpam)                  % iterate
+                EQrr=EQr(EQj:-1:EQj-EQn+1)';         % vector of received signal
+                EQe=TSpam(EQj-EQdelta)-EQrr'*EQf;        % calculate error
+                EQf=EQf+EQmu*EQe*EQrr;               % update equalizer coefficients
+            end
+
+            EQout = [EQout,conv(EQf,EQframe)];
+        end
+        
+        %figure('Name', 'After EQ')
+        %plot(EQout(1:30000), '.');
+        
+        EQoutQuant = quantalph(EQout,[-3,-1,1,3]); 
+ 
+        
+%Re-Correlate
+
+%Find Training Sequences
+    %Create training sequence vector
+        [RTScorr, RTScorrLags] = xcorr(EQoutQuant, TSpam); %Find correlation between preamble and XS
+            
+        [RTScorrPeaksMags, RTScorrPeaksLocs] = findpeaks(RTScorr, 'NPeaks', 11, 'MinPeakDistance', 2500, 'MinPeakHeight', 600);
+        RTSxsPeakLocs = RTScorrLags(RTScorrPeaksLocs); %Locations of preamble starts in terms of XS
+        
+        if(RTSdebug)
+            figure('Name', 'ReCorrelation of Training Sequence')
+            stem(RTScorr);
+
+            figure('Name', 'TScorr Peaks')
+            stem(RTScorrLags(RTScorrPeaksLocs), RTScorrPeaksMags);
+        end
+        
+        RTSUserOffset = [0, 875, 875*2];
+        
+        RTSout = [];
+        for(RTSi = 1:length(RTSxsPeakLocs))
+            RTSout = [RTSout, EQoutQuant(RTSxsPeakLocs(RTSi) + length(TSpam) + 1 + RTSUserOffset(desireduser): RTSxsPeakLocs(RTSi) + length(TSpam) + RTSUserOffset(desireduser) + 875)];
+        end   
+        
+        decoded_text = pam2letters2(RTSout);
+        y = EQout;
+        
+        
     
     
     
