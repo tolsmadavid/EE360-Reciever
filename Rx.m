@@ -37,8 +37,9 @@ RTSdebug = 0;
         ppFilterOrder = 500;
         ppFilterFreq = [0 .56 .58 .61 .63 1];
         ppFilterMags = [0 0 1 1 0 0];
-        ppFilterB = firpm(ppFilterOrder, ppFilterFreq, ppFilterMags);
-        ppRPreProcess = filter(ppFilterB, 1, ppSquaredR);
+        %ppFilterB = firpm(ppFilterOrder, ppFilterFreq, ppFilterMags);
+        [ppFilterB, ppFilterA] = butter(6,[.58,.61]);
+        ppRPreProcess = filter(ppFilterB, ppFilterA, ppSquaredR);
 
     %Carrier Frequency Recovory
         ppFFTrPreProcess = fft(ppRPreProcess);
@@ -52,12 +53,13 @@ RTSdebug = 0;
         ppPhaseS = mod(ppPhaseP - ppPhaseBPF, pi);
 
     %Dual PLLs
-        pllMu1= 0.012; pllMu2 = 0.00009;                  % algorithm stepsizes
+        pllMu1= 0.03; pllMu2 = 0.00003;                  % algorithm stepsizes
         pllF0=300000;                            % assumed freq at receiver
         pllT = 0:Ts:length(r)*Ts-Ts;
         
         pllTh1 = zeros(1, length(r));
         pllTh2 = zeros(1, length(r));
+        pllTh2(1) = 0.05;
         for k=1:length(r)-1                      % combine top PLL th1
           pllTh1(k+1)=pllTh1(k)-pllMu1*ppRPreProcess(k)*sin(4*pi*pllF0*pllT(k)+2*pllTh1(k)+ppPhaseBPF);           
           pllTh2(k+1)=pllTh2(k)-pllMu2*ppRPreProcess(k)*sin(4*pi*pllF0*pllT(k)+2*pllTh1(k)+2*pllTh2(k)+ppPhaseBPF);  
@@ -72,7 +74,9 @@ RTSdebug = 0;
 
     demodFl=250; demodFf=[0 .25 .27 1]; demodFa=[1 1 0 0];
     demodH=firpm(demodFl,demodFf,demodFa);                    % LPF design
-    demodFilteredR = filter(demodH, 1, demodR);
+    %demodFilteredR = filter(demodH, 1, demodR);
+    [demodFilterB, demodFilterA] = butter(6,.25,'low');
+    demodFilteredR = filter(demodFilterB, demodFilterA, demodR);
 
     if(debugPll)
         figure('Name', 'Th1, Th2, DemodR')
@@ -94,13 +98,13 @@ RTSdebug = 0;
     
 %Interpolator Downsampler
     IDtnow = (srrcWidth/2)*overSampleFactor+1;
-    IDtau = 0;
+    IDtau = 0.3;
     IDxs = zeros(1,length(r));
     IDtauSave = zeros(1, length(r));
     IDi = 0;
-    IDmuDD = 0.03;
-    IDmuOP = 0.01;
-    IDdelta = .4;
+    IDmuDD = 0.004;
+    IDmuOP = 0.09;
+    IDdelta = .46;
 
     
     while IDtnow < length(r)- 2*(srrcWidth/2)*overSampleFactor
@@ -116,7 +120,7 @@ RTSdebug = 0;
         IDqx=quantalph(IDxs(IDi),[-3,-1,1,3]);  % quantize to alphabet
         %IDtau=IDtau-IDmu*IDdx*(IDqx-IDxs(IDi));         % alg update: DD
         
-        IDtau=IDtau + IDmuDD*IDdx*(IDqx-IDxs(IDi)) + IDmuOP*IDdx*IDxs(IDi);
+        IDtau=IDtau - IDmuDD*IDdx*(IDqx-IDxs(IDi)) + IDmuOP*IDdx*IDxs(IDi);
         
         IDtnow=IDtnow+overSampleFactor; 
         IDtausave(IDi)=IDtau;      % save for plotting
