@@ -77,3 +77,4 @@ end
 % output results
 disp(['BER: ' num2str(BER)])
 disp(['Grade: ' num2str(grade)]);
+decoded_msg

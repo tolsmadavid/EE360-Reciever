@@ -13,9 +13,9 @@ addpath('C:\Users\David\Documents\MATLAB\MatLab Files')
 
 %Debug Bits
 
-debugPll = 0;
+debugPll = 1;
 ssrcDebug = 0;
-IDdebug = 0;
+IDdebug = 1;
 TSdebug = 0;
 eqDebug = 1;
 RTSdebug = 0;
@@ -52,7 +52,7 @@ RTSdebug = 0;
         ppPhaseS = mod(ppPhaseP - ppPhaseBPF, pi);
 
     %Dual PLLs
-        pllMu1= 0.012; pllMu2 = 0.00005;                  % algorithm stepsizes
+        pllMu1= 0.012; pllMu2 = 0.00009;                  % algorithm stepsizes
         pllF0=300000;                            % assumed freq at receiver
         pllT = 0:Ts:length(r)*Ts-Ts;
         
@@ -70,7 +70,7 @@ RTSdebug = 0;
     demodCos = cos(2*pi*demodF0*demodT + pllTh1 + pllTh2);
     demodR = demodCos.*r';
 
-    demodFl=200; demodFf=[0 .2 .25 1]; demodFa=[1 1 0 0];
+    demodFl=250; demodFf=[0 .25 .27 1]; demodFa=[1 1 0 0];
     demodH=firpm(demodFl,demodFf,demodFa);                    % LPF design
     demodFilteredR = filter(demodH, 1, demodR);
 
@@ -92,15 +92,14 @@ RTSdebug = 0;
         plot(psmfRFiltered);
     end
     
-    %psmfRFiltered = psmfRFiltered*1.2;
 %Interpolator Downsampler
     IDtnow = (srrcWidth/2)*overSampleFactor+1;
     IDtau = 0;
     IDxs = zeros(1,length(r));
     IDtauSave = zeros(1, length(r));
     IDi = 0;
-    IDmuDD = 0.05;
-    IDmuOP = 0.05;
+    IDmuDD = 0.03;
+    IDmuOP = 0.01;
     IDdelta = .4;
 
     
@@ -117,7 +116,7 @@ RTSdebug = 0;
         IDqx=quantalph(IDxs(IDi),[-3,-1,1,3]);  % quantize to alphabet
         %IDtau=IDtau-IDmu*IDdx*(IDqx-IDxs(IDi));         % alg update: DD
         
-        IDtau=IDtau - IDmuDD*IDdx*(IDqx-IDxs(IDi)) + ((1.7210e+05-IDtnow)/(1.7210e+05))*IDmuOP*IDdx*IDxs(IDi);
+        IDtau=IDtau + IDmuDD*IDdx*(IDqx-IDxs(IDi)) + IDmuOP*IDdx*IDxs(IDi);
         
         IDtnow=IDtnow+overSampleFactor; 
         IDtausave(IDi)=IDtau;      % save for plotting
@@ -138,13 +137,13 @@ RTSdebug = 0;
         TSpam = letters2pam2(TS);
         [TScorr, TScorrLags] = xcorr(IDxs, TSpam); %Find correlation between preamble and XS
         
-        [TScorrPeaksMags, ~] = findpeaks(TScorr, 'NPeaks', 11, 'MinPeakDistance', 1000, 'MinPeakHeight', 400);
+        [TScorrPeaksMags, ~] = findpeaks(TScorr, 'NPeaks', 11, 'MinPeakDistance', 1000, 'MinPeakHeight', 500);
         if(isempty(TScorrPeaksMags))
             TScorr = -TScorr;
             IDxs = -IDxs;
         end
             
-        [TScorrPeaksMags, TScorrPeaksLocs] = findpeaks(TScorr, 'NPeaks', 11, 'MinPeakDistance', 1000, 'MinPeakHeight', 400);
+        [TScorrPeaksMags, TScorrPeaksLocs] = findpeaks(TScorr, 'NPeaks', 11, 'MinPeakDistance', 1000, 'MinPeakHeight', 500);
         TSxsPeakLocs = TScorrLags(TScorrPeaksLocs); %Locations of preamble starts in terms of XS
         
         if(TSdebug)
@@ -158,9 +157,9 @@ RTSdebug = 0;
 %Equalizer
     %Chop TSxs into blocks for processing
         EQout = [];
-        EQn=20; 
-        EQmu=.02; 
-        EQdelta=10;             % stepsize and delay delta
+        EQn=12; 
+        EQmu=.025; 
+        EQdelta=4;             % stepsize and delay delta
         EQf=zeros(EQn,1);           % initialize equalizer at 0
         
         for(EQi = 1:length(TSxsPeakLocs))
@@ -191,7 +190,7 @@ RTSdebug = 0;
     %Create training sequence vector
         [RTScorr, RTScorrLags] = xcorr(EQoutQuant, TSpam); %Find correlation between preamble and XS
             
-        [RTScorrPeaksMags, RTScorrPeaksLocs] = findpeaks(RTScorr, 'NPeaks', 11, 'MinPeakDistance', 2500, 'MinPeakHeight', 400);
+        [RTScorrPeaksMags, RTScorrPeaksLocs] = findpeaks(RTScorr, 'NPeaks', 11, 'MinPeakDistance', 2500, 'MinPeakHeight', 500);
         RTSxsPeakLocs = RTScorrLags(RTScorrPeaksLocs); %Locations of preamble starts in terms of XS
         
         if(RTSdebug)
@@ -210,12 +209,4 @@ RTSdebug = 0;
         end   
         
         decoded_text = pam2letters2(RTSout);
-        y = EQout;
-        
-        
-    
-    
-    
-    
-
-
+y = EQout;
