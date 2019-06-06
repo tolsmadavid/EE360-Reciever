@@ -13,11 +13,11 @@ addpath('C:\Users\David\Documents\MATLAB\MatLab Files')
 
 %Debug Bits
 
-debugPll = 1;
+debugPll = 0;
 ssrcDebug = 0;
-IDdebug = 1;
+IDdebug = 0;
 TSdebug = 0;
-eqDebug = 1;
+eqDebug = 0;
 RTSdebug = 0;
 
 %Parameters
@@ -214,3 +214,6 @@ RTSdebug = 0;
         
         decoded_text = pam2letters2(RTSout);
 y = EQout;
+
+
+
