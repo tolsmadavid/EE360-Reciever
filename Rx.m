@@ -19,7 +19,7 @@ IDdebug = 0;
 TSdebug = 0;
 eqDebug = 0;
 RTSdebug = 0;
-%hi
+
 %Parameters
     
     interFreq = 2e6;
